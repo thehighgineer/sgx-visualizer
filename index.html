@@ -363,18 +363,20 @@
         // extra slow rotation for galaxy; large radius variations
         this.angle += dt * settings.speed * 0.01 * (1 + micLevel);
         this.radius += (Math.random() - 0.5) * settings.turb * 0.05;
-        this.x = width / 2 + Math.cos(this.angle) * this.radius;
+        this.x = width / 2 + Math.cos(this.ngle) * this.radius;
         this.y = height / 2 + Math.sin(this.angle) * this.radius;
         this.rot += dt * settings.speed * 0.2 * (1 + micLevel);
         return;
       }
       // Default behaviours (random, from edges, etc.): apply turbulence, pointer wind, drift, scaling and mic
-      this.vx += (Math.random() - 0.5) * settings.turb * 0.1;
-      this.vy += (Math.random() - 0.5) * settings.turb * 0.1;
-      if (settings.pointerWind) {
-         // stronger wind effect: apply windX with higher influence
-         this.vx += settings.windX * 2.0;
-      }
+              // settings.windX *= 0.94;
+              this.vx += (Math.random() - 0.5) * settings.turb * (1 + micLevel) * 0.1;
+              this.vy += (Math.random() - 0.5) * settings.turb * (1 + micLevel) * 0.1;
+         if (settings.pointerWind) {
+            // stronger wind effect: apply windX with higher influence
+            this.vx += settings.windX * 2.0;
+            settings.windX *= 0.94;
+        }
       if (settings.drift) {
         const t = performance.now();
         this.vx += Math.sin(t / 4000) * 0.02;
@@ -772,7 +774,7 @@
     params.set('wf', settings.widthFactor.toFixed(2));
     params.set('hf', settings.heightFactor.toFixed(2));
     params.set('gl', settings.glow.toFixed(2));
-    cconconst url = window.location.origin + window.location.pathname + '?e'?embed=1&' + params.toString()()
+const url = window.location.origin + window.locat=1n.=1 + '?embed=1&' + params.toString();;
     
     const embedCode = `<iframe src="${url}" style="width:100%;height:100%;border:0;"></iframe>`;
     navigator.clipboard.writeText(embedCode).then(() => alert('Embed code copied!'));
