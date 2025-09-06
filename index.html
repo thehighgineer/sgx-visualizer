@@ -60,7 +60,8 @@
           <option value="fromLeft">From Left</option>
           <option value="fromRight">From Right</option>
           <option value="spiral">Spiral</option>
-          <option value="path">Path</option>
+      <option value="path">Path</option>
+      <option value="galaxy">Galaxy</option>
         </select>
       </div>
     </div>
@@ -133,16 +134,20 @@
     </div>
     <!-- Path Drawing Controls -->
     <div id="pathControls" class="hidden space-y-2 pt-2 border-t border-white/20">
-      <button id="startDrawing" class="w-full py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm">Start Drawing Path</button>
+      <!-- When behaviour is 'path', clicking on the canvas toggles drawing on/off. The buttons below provide an explicit clear/reset control. -->
       <button id="clearPath" class="w-full py-1 bg-red-600 hover:bg-red-500 rounded text-sm">Clear Path</button>
     </div>
     <!-- Randomize & Share -->
     <div class="flex space-x-2 pt-2 border-t border-white/20">
       <button id="randomizeBtn" class="flex-1 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Randomize</button>
       <button id="shareBtn" class="flex-1 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Share</button>
+      <button id="embedBtn" class="flex-1 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Embed</button>
     </div>
     <!-- Show panel button hidden by default -->
     <button id="showPanel" class="hidden absolute top-3 right-3 py-1 px-3 bg-white/20 hover:bg-white/30 rounded text-sm">Show</button>
+
+  <!-- Branding / watermark -->
+  <div id="branding" class="absolute bottom-2 left-2 text-xs text-white/60 pointer-events-none select-none">Spatialgineers Visualizer</div>
   </div>
   <script>
   // Canvas and context
@@ -180,6 +185,7 @@
     analyser: null,
     micData: null,
     windX: 0
+    ,rotationSpeed: 0.1
   };
 
   // UI elements
@@ -193,6 +199,9 @@
   const sizeSlider = document.getElementById('sizeSlider');
   const speedSlider = document.getElementById('speedSlider');
   const turbSlider = document.getElementById('turbSlider');
+  const widthSlider = document.getElementById('widthSlider');
+  const heightSlider = document.getElementById('heightSlider');
+  const glowSlider = document.getElementById('glowSlider');
   const micToggle = document.getElementById('micToggle');
   const windToggle = document.getElementById('windToggle');
   const driftToggle = document.getElementById('driftToggle');
@@ -204,9 +213,11 @@
   const clearPathBtn = document.getElementById('clearPath');
   const randomizeBtn = document.getElementById('randomizeBtn');
   const shareBtn = document.getElementById('shareBtn');
+  const embedBtn = document.getElementById('embedBtn');
   const hidePanelBtn = document.getElementById('hidePanel');
   const showPanelBtn = document.getElementById('showPanel');
   const panel = document.getElementById('panel');
+  const branding = document.getElementById('branding');
 
   // Setup mic
   async function initMic() {
@@ -232,7 +243,9 @@
     let sum = 0;
     const len = Math.min(64, settings.micData.length);
     for (let i = 0; i < len; i++) sum += settings.micData[i];
-    return Math.min((sum / len) / 255 * 3, 1);
+    // amplify average
+    const level = (sum / len) / 255;
+    return Math.min(level * 5, 1);
   }
 
   // Particle class
@@ -264,11 +277,21 @@
           this.y = Math.random() * height;
           break;
         case 'spiral':
-          // assign radius and angle for spiral motion
+          // assign radius and angle for spiral motion. Each particle orbits around the center.
           this.radius = Math.random() * Math.min(width, height) * 0.4;
           this.angle = Math.random() * Math.PI * 2;
           this.x = width / 2 + Math.cos(this.angle) * this.radius;
           this.y = height / 2 + Math.sin(this.angle) * this.radius;
+          // give each particle its own rotation offset
+          this.rot = Math.random() * Math.PI * 2;
+          break;
+        case 'galaxy':
+          // galaxy behaviour: like spiral but slower and larger radius distribution
+          this.radius = Math.random() * Math.min(width, height) * 0.5;
+          this.angle = Math.random() * Math.PI * 2;
+          this.x = width / 2 + Math.cos(this.angle) * this.radius;
+          this.y = height / 2 + Math.sin(this.angle) * this.radius;
+          this.rot = Math.random() * Math.PI * 2;
           break;
         default: // random
           this.x = Math.random() * width;
@@ -301,42 +324,54 @@
       this.t = Math.random();
     }
     update(dt) {
+      // mic influences many aspects of movement
       const micLevel = settings.micReactive ? settings.micLevel : 0;
-      if (settings.shape === 'bars') {
-        // bars handled separately
-        return;
-      }
+      // bars handled elsewhere
+      if (settings.shape === 'bars') return;
+      // Path behaviour: follow drawn path based on param t. Toggle using clicks on canvas.
       if (settings.behavior === 'path' && settings.pathPoints.length > 1) {
-        // move along drawn path
         this.t += dt * settings.speed * 0.1 * (1 + micLevel);
         this.t %= 1;
         const pos = pointOnPath(settings.pathPoints, this.t);
         this.x = pos.x;
         this.y = pos.y;
-      } else if (settings.behavior === 'spiral') {
-        // update spiral motion
-        this.angle += dt * settings.speed * 0.5 * (1 + micLevel);
+        return;
+      }
+      // Spiral behaviour: orbit around center with its own rotation
+      if (settings.behavior === 'spiral') {
+        this.angle += dt * settings.speed * settings.rotationSpeed * (1 + micLevel * 2);
+        // slight radial jitter based on turbulence
         this.radius += (Math.random() - 0.5) * settings.turb * 0.1;
         this.x = width / 2 + Math.cos(this.angle) * this.radius;
         this.y = height / 2 + Math.sin(this.angle) * this.radius;
-      } else {
-        // turbulence influences velocity
-        this.vx += (Math.random() - 0.5) * settings.turb * 0.1;
-        this.vy += (Math.random() - 0.5) * settings.turb * 0.1;
-        // pointer wind influences vx
-        if (settings.pointerWind) {
-          this.vx += settings.windX * 0.1;
-        }
-        // drift influences periodic movement
-        if (settings.drift) {
-          this.vx += Math.sin(performance.now() / 5000) * 0.01;
-          this.vy += Math.cos(performance.now() / 5000) * 0.01;
-        }
-        // apply width and height scaling factors to movement
-        this.x += this.vx * settings.widthFactor;
-        this.y += this.vy * settings.heightFactor;
+        this.rot += dt * settings.speed * 0.5 * (1 + micLevel);
+        return;
       }
-      // bounce or wrap
+      // Galaxy behaviour: swirl like spiral but slower and larger
+      if (settings.behavior === 'galaxy') {
+        this.angle += dt * settings.speed * 0.05 * (1 + micLevel);
+        this.radius += (Math.random() - 0.5) * settings.turb * 0.05;
+        this.x = width / 2 + Math.cos(this.angle) * this.radius;
+        this.y = height / 2 + Math.sin(this.angle) * this.radius;
+        this.rot += dt * settings.speed * 0.25 * (1 + micLevel);
+        return;
+      }
+      // Default behaviours (random, from edges, etc.): apply turbulence, pointer wind, drift, scaling and mic
+      this.vx += (Math.random() - 0.5) * settings.turb * 0.1;
+      this.vy += (Math.random() - 0.5) * settings.turb * 0.1;
+      if (settings.pointerWind) {
+        // stronger wind effect
+        this.vx += settings.windX * 0.2;
+      }
+      if (settings.drift) {
+        const t = performance.now();
+        this.vx += Math.sin(t / 4000) * 0.02;
+        this.vy += Math.cos(t / 4000) * 0.02;
+      }
+      // apply width and height scaling factors and mic influence
+      this.x += this.vx * settings.widthFactor * (1 + micLevel);
+      this.y += this.vy * settings.heightFactor * (1 + micLevel);
+      // Wrap or reset
       if (this.x < -50 || this.x > width + 50 || this.y < -50 || this.y > height + 50) {
         this.reset();
       }
@@ -360,20 +395,32 @@
       } else if (settings.shape === 'square') {
         const s = this.size * (1 + micLevel);
         ctx.fillStyle = col;
-        ctx.fillRect(this.x - s / 2, this.y - s / 2, s, s);
+        ctx.save();
+        // rotate square around its centre when spiral or galaxy behaviour
+        ctx.translate(this.x, this.y);
+        ctx.rotate(settings.behavior === 'spiral' || settings.behavior === 'galaxy' ? this.rot : 0);
+        ctx.fillRect(-s / 2, -s / 2, s, s);
+        ctx.restore();
       } else if (settings.shape === 'line') {
         const len = this.size * 4 * (1 + micLevel);
         ctx.strokeStyle = col;
         ctx.lineWidth = 2;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        // rotate line like a spinner when spiral/galaxy
+        ctx.rotate(settings.behavior === 'spiral' || settings.behavior === 'galaxy' ? this.rot : 0);
         ctx.beginPath();
-        ctx.moveTo(this.x - len / 2, this.y);
-        ctx.lineTo(this.x + len / 2, this.y);
+        ctx.moveTo(-len / 2, 0);
+        ctx.lineTo(len / 2, 0);
         ctx.stroke();
+        ctx.restore();
       } else if (settings.shape === 'image' && this.img) {
         const s = this.size * 3 * (1 + micLevel);
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate((this.vx + this.vy) * 0.05);
+        // rotate image when spiral/galaxy or random spin
+        const rotAngle = settings.behavior === 'spiral' || settings.behavior === 'galaxy' ? this.rot : (this.vx + this.vy) * 0.05;
+        ctx.rotate(rotAngle);
         ctx.drawImage(this.img, -s / 2, -s / 2, s, s);
         ctx.restore();
       }
@@ -450,13 +497,21 @@
 
   function drawBars() {
     // bars: draws vertical bars across width using mic level and colors
-    const mic = settings.micLevel;
+    // Draw responsive bars. Use analyser data when available.
     const n = Math.min(settings.count, 64);
     const barWidth = width / n;
     for (let i = 0; i < n; i++) {
-      const rnd = Math.random();
-      const hMult = 0.3 + rnd * 0.7;
-      const barHeight = (mic * height * 0.8 * hMult);
+      let amplitude = 0;
+      if (settings.analyser && settings.micData) {
+        // sample from frequency data at intervals
+        const index = Math.floor(i / n * settings.micData.length);
+        amplitude = settings.micData[index] / 255;
+      } else {
+        amplitude = settings.micLevel || Math.random() * 0.5;
+      }
+      // compute bar height using amplitude and turbulence to add variation
+      const hMult = 0.2 + Math.random() * 0.8;
+      const barHeight = Math.max(4, amplitude * height * 0.8 * hMult);
       const x = i * barWidth;
       const y = height - barHeight;
       const col = randomColor();
@@ -489,7 +544,7 @@
     // show image upload row only for image shape
     imageUploadRow.classList.toggle('hidden', settings.shape !== 'image');
     // show path controls only for path behaviour
-    pathControls.classList.toggle('hidden', !(settings.shape === 'path' || settings.behavior === 'path'));
+    pathControls.classList.toggle('hidden', settings.behavior !== 'path');
     if (settings.shape === 'bars') {
       behaviorSelect.value = 'random';
       behaviorSelect.disabled = true;
@@ -500,7 +555,7 @@
   });
   behaviorSelect.addEventListener('change', (e) => {
     settings.behavior = e.target.value;
-    pathControls.classList.toggle('hidden', !(settings.behavior === 'path'));
+    pathControls.classList.toggle('hidden', settings.behavior !== 'path');
     initParticles();
   });
   [c1,c2,c3,c4].forEach((input, idx) => {
@@ -520,6 +575,15 @@
   });
   turbSlider.addEventListener('input', () => {
     settings.turb = parseFloat(turbSlider.value);
+  });
+  widthSlider.addEventListener('input', () => {
+    settings.widthFactor = parseFloat(widthSlider.value);
+  });
+  heightSlider.addEventListener('input', () => {
+    settings.heightFactor = parseFloat(heightSlider.value);
+  });
+  glowSlider.addEventListener('input', () => {
+    settings.glow = parseFloat(glowSlider.value);
   });
   micToggle.addEventListener('change', () => {
     settings.micReactive = micToggle.checked;
@@ -555,15 +619,28 @@
   let lastPointerX = null;
   canvas.addEventListener('pointerdown', (e) => {
     lastPointerX = e.clientX;
-    if (settings.behavior === 'path' && settings.drawing) {
-      // start drawing path
-      settings.pathPoints.push({ x: e.clientX, y: e.clientY });
+    // For pointer wind, track starting x
+    if (settings.pointerWind) {
+      // nothing else here
+    }
+    // Toggle drawing mode for path behaviour when user clicks on canvas
+    if (settings.behavior === 'path') {
+      if (!settings.drawing) {
+        // start drawing: reset path and add first point
+        settings.drawing = true;
+        settings.pathPoints = [];
+        settings.pathPoints.push({ x: e.clientX, y: e.clientY });
+      } else {
+        // stop drawing
+        settings.drawing = false;
+      }
     }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (settings.pointerWind && lastPointerX !== null) {
       const dx = e.clientX - lastPointerX;
-      settings.windX = dx / width * 10; // amplified
+      // amplify wind and clamp to range
+      settings.windX = dx / width * 20;
       lastPointerX = e.clientX;
     }
     if (settings.behavior === 'path' && settings.drawing) {
@@ -573,17 +650,11 @@
   canvas.addEventListener('pointerup', () => {
     lastPointerX = null;
     settings.windX = 0;
-    if (settings.behavior === 'path' && settings.drawing) {
-      settings.drawing = false;
-    }
-  });
-  // Start drawing path
-  startDrawingBtn.addEventListener('click', () => {
-    settings.drawing = true;
-    settings.pathPoints = [];
+    // no auto-stop for path drawing: toggled by pointerdown
   });
   clearPathBtn.addEventListener('click', () => {
     settings.pathPoints = [];
+    settings.drawing = false;
   });
 
   // Hide/show panel
@@ -609,7 +680,7 @@
     settings.shape = shapes[Math.floor(Math.random()*shapes.length)];
     shapeSelect.value = settings.shape;
     // random behaviour including new behaviours
-    const behaviors = ['random','fromCenter','fromBottom','fromTop','fromLeft','fromRight','spiral','path'];
+    const behaviors = ['random','fromCenter','fromBottom','fromTop','fromLeft','fromRight','spiral','path','galaxy'];
     settings.behavior = behaviors[Math.floor(Math.random()*behaviors.length)];
     behaviorSelect.value = settings.behavior;
     // show/hide image upload and path controls based on new selections
@@ -653,6 +724,28 @@
     params.set('gl', settings.glow.toFixed(2));
     const url = window.location.origin + window.location.pathname + '?' + params.toString();
     navigator.clipboard.writeText(url).then(() => alert('Share link copied!'));
+  });
+
+  // Generate embed code
+  embedBtn.addEventListener('click', () => {
+    // Build query params like share
+    const params = new URLSearchParams();
+    params.set('s', settings.shape);
+    params.set('b', settings.behavior);
+    settings.colors.forEach((c,i)=> params.set('c'+i, c.substring(1)));
+    params.set('n', settings.count);
+    params.set('sz', settings.size.toFixed(2));
+    params.set('sp', settings.speed.toFixed(2));
+    params.set('tu', settings.turb.toFixed(2));
+    params.set('mi', settings.micReactive ? '1':'0');
+    params.set('pw', settings.pointerWind ? '1':'0');
+    params.set('dr', settings.drift ? '1':'0');
+    params.set('wf', settings.widthFactor.toFixed(2));
+    params.set('hf', settings.heightFactor.toFixed(2));
+    params.set('gl', settings.glow.toFixed(2));
+    const url = window.location.origin + window.location.pathname + '?' + params.toString();
+    const embedCode = `<iframe src="${url}" style="width:100%;height:100%;border:0;"></iframe>`;
+    navigator.clipboard.writeText(embedCode).then(() => alert('Embed code copied!'));
   });
 
   // Restore from URL hash
