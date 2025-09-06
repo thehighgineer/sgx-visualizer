@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spatialgineers Visualizer</title>
+  <!-- Tailwind CSS for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    #canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+    /* hide file inputs but keep label clickable */
+    input[type=file] {
+      display: none;
+    }
+    .panel {
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="bg-black text-white">
+  <canvas id="canvas"></canvas>
+  <!-- Control panel -->
+  <div id="panel" class="panel absolute top-3 right-3 w-[min(92vw,380px)] max-h-[calc(100vh-1.5rem)] rounded-2xl border border-white/10 bg-black/70 text-white shadow-xl overflow-y-auto p-4 space-y-3">
+    <div class="flex justify-between items-center pb-2 border-b border-white/20">
+      <h2 class="text-lg font-semibold">Spatialgineers Visualizer</h2>
+      <button id="hidePanel" class="text-sm px-2 py-1 bg-white/20 hover:bg-white/30 rounded">Hide</button>
+    </div>
+    <!-- Shape & Mode selectors -->
+    <div class="grid grid-cols-2 gap-2">
+      <div>
+        <label class="block text-xs mb-1">Shape</label>
+        <select id="shapeSelect" class="w-full p-1 bg-gray-800 border border-gray-700 rounded">
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="line">Line</option>
+          <option value="image">Image</option>
+          <option value="bars">Bars</option>
+          <option value="path">Path</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs mb-1">Behaviour</label>
+        <select id="behaviorSelect" class="w-full p-1 bg-gray-800 border border-gray-700 rounded">
+          <option value="random">Random</option>
+          <option value="fromCenter">From Center</option>
+          <option value="fromBottom">From Bottom</option>
+          <option value="fromTop">From Top</option>
+        </select>
+      </div>
+    </div>
+    <!-- Colors -->
+    <div>
+      <label class="block text-xs mb-1">Colors</label>
+      <div class="flex space-x-2">
+        <input type="color" id="c1" value="#3a0d00" class="w-6 h-6 border-none p-0">
+        <input type="color" id="c2" value="#fd6a00" class="w-6 h-6 border-none p-0">
+        <input type="color" id="c3" value="#ffd26a" class="w-6 h-6 border-none p-0">
+        <input type="color" id="c4" value="#000000" class="w-6 h-6 border-none p-0">
+      </div>
+    </div>
+    <!-- Image upload for particles -->
+    <div id="imageUploadRow" class="hidden">
+      <label class="block text-xs mb-1">Particle Images</label>
+      <label class="w-full py-1 px-3 bg-gray-700 hover:bg-gray-600 rounded cursor-pointer text-xs">Choose images
+        <input type="file" id="particleImages" multiple accept="image/*">
+      </label>
+    </div>
+    <!-- Background upload -->
+    <div>
+      <label class="block text-xs mb-1">Background Image</label>
+      <label class="w-full py-1 px-3 bg-gray-700 hover:bg-gray-600 rounded cursor-pointer text-xs">Choose background
+        <input type="file" id="backgroundImage" accept="image/*">
+      </label>
+    </div>
+    <!-- Sliders and toggles -->
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Count</label>
+        <input type="range" id="countSlider" min="10" max="500" value="200" class="w-40">
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Size</label>
+        <input type="range" id="sizeSlider" min="1" max="50" value="8" class="w-40">
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Speed</label>
+        <input type="range" id="speedSlider" min="0.1" max="5" value="1" step="0.1" class="w-40">
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Turbulence</label>
+        <input type="range" id="turbSlider" min="0" max="2" value="1" step="0.1" class="w-40">
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Mic Reactive</label>
+        <input type="checkbox" id="micToggle" checked>
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Pointer Wind</label>
+        <input type="checkbox" id="windToggle">
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs">Auto Drift</label>
+        <input type="checkbox" id="driftToggle" checked>
+      </div>
+    </div>
+    <!-- Path Drawing Controls -->
+    <div id="pathControls" class="hidden space-y-2 pt-2 border-t border-white/20">
+      <button id="startDrawing" class="w-full py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm">Start Drawing Path</button>
+      <button id="clearPath" class="w-full py-1 bg-red-600 hover:bg-red-500 rounded text-sm">Clear Path</button>
+    </div>
+    <!-- Randomize & Share -->
+    <div class="flex space-x-2 pt-2 border-t border-white/20">
+      <button id="randomizeBtn" class="flex-1 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Randomize</button>
+      <button id="shareBtn" class="flex-1 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Share</button>
+    </div>
+    <!-- Show panel button hidden by default -->
+    <button id="showPanel" class="hidden absolute top-3 right-3 py-1 px-3 bg-white/20 hover:bg-white/30 rounded text-sm">Show</button>
+  </div>
+  <script>
+  // Canvas and context
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  let width = canvas.width = window.innerWidth;
+  let height = canvas.height = window.innerHeight;
+  window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  });
+
+  // Settings object
+  const settings = {
+    shape: 'circle',
+    behavior: 'random',
+    colors: ['#3a0d00', '#fd6a00', '#ffd26a', '#000000'],
+    count: 200,
+    size: 8,
+    speed: 1,
+    turb: 1,
+    micReactive: true,
+    pointerWind: false,
+    drift: true,
+    images: [],
+    background: null,
+    particles: [],
+    pathPoints: [],
+    drawing: false,
+    micLevel: 0,
+    audioCtx: null,
+    analyser: null,
+    micData: null,
+    windX: 0
+  };
+
+  // UI elements
+  const shapeSelect = document.getElementById('shapeSelect');
+  const behaviorSelect = document.getElementById('behaviorSelect');
+  const c1 = document.getElementById('c1');
+  const c2 = document.getElementById('c2');
+  const c3 = document.getElementById('c3');
+  const c4 = document.getElementById('c4');
+  const countSlider = document.getElementById('countSlider');
+  const sizeSlider = document.getElementById('sizeSlider');
+  const speedSlider = document.getElementById('speedSlider');
+  const turbSlider = document.getElementById('turbSlider');
+  const micToggle = document.getElementById('micToggle');
+  const windToggle = document.getElementById('windToggle');
+  const driftToggle = document.getElementById('driftToggle');
+  const particleImagesInput = document.getElementById('particleImages');
+  const backgroundImageInput = document.getElementById('backgroundImage');
+  const imageUploadRow = document.getElementById('imageUploadRow');
+  const pathControls = document.getElementById('pathControls');
+  const startDrawingBtn = document.getElementById('startDrawing');
+  const clearPathBtn = document.getElementById('clearPath');
+  const randomizeBtn = document.getElementById('randomizeBtn');
+  const shareBtn = document.getElementById('shareBtn');
+  const hidePanelBtn = document.getElementById('hidePanel');
+  const showPanelBtn = document.getElementById('showPanel');
+  const panel = document.getElementById('panel');
+
+  // Setup mic
+  async function initMic() {
+    try {
+      settings.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      settings.analyser = settings.audioCtx.createAnalyser();
+      settings.analyser.fftSize = 512;
+      const source = settings.audioCtx.createMediaStreamSource(stream);
+      source.connect(settings.analyser);
+      settings.micData = new Uint8Array(settings.analyser.frequencyBinCount);
+      console.log('Mic initialized');
+    } catch (err) {
+      console.log('Mic init failed', err);
+      settings.analyser = null;
+    }
+  }
+
+  // Get mic level
+  function getMicLevel() {
+    if (!settings.analyser || !settings.micReactive) return 0;
+    settings.analyser.getByteFrequencyData(settings.micData);
+    let sum = 0;
+    const len = Math.min(64, settings.micData.length);
+    for (let i = 0; i < len; i++) sum += settings.micData[i];
+    return (sum / len) / 255;
+  }
+
+  // Particle class
+  class Particle {
+    constructor() {
+      this.reset();
+    }
+    reset() {
+      // spawn position based on behavior
+      switch (settings.behavior) {
+        case 'fromCenter':
+          this.x = width / 2;
+          this.y = height / 2;
+          break;
+        case 'fromBottom':
+          this.x = Math.random() * width;
+          this.y = height + settings.size;
+          break;
+        case 'fromTop':
+          this.x = Math.random() * width;
+          this.y = -settings.size;
+          break;
+        default: // random
+          this.x = Math.random() * width;
+          this.y = Math.random() * height;
+      }
+      // velocity
+      const angle = Math.random() * Math.PI * 2;
+      const speed = settings.speed * (0.5 + Math.random());
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed;
+      // shape-specific properties
+      this.size = settings.size * (0.5 + Math.random());
+      this.col = randomColor();
+      this.img = null;
+      if (settings.shape === 'image' && settings.images.length > 0) {
+        this.img = settings.images[Math.floor(Math.random() * settings.images.length)];
+      }
+      // Path parameter for path behaviour
+      this.t = Math.random();
+    }
+    update(dt) {
+      const micLevel = settings.micReactive ? settings.micLevel : 0;
+      if (settings.shape === 'bars') {
+        // bars handled separately
+        return;
+      }
+      if (settings.behavior === 'path' && settings.pathPoints.length > 1) {
+        // move along path
+        this.t += dt * settings.speed * 0.1 * (1 + micLevel);
+        this.t %= 1;
+        const pos = pointOnPath(settings.pathPoints, this.t);
+        this.x = pos.x;
+        this.y = pos.y;
+      } else {
+        // turbulence influences velocity
+        this.vx += (Math.random() - 0.5) * settings.turb * 0.1;
+        this.vy += (Math.random() - 0.5) * settings.turb * 0.1;
+        // pointer wind influences vx
+        if (settings.pointerWind) {
+          this.vx += settings.windX * 0.05;
+        }
+        // drift influences some periodic movement
+        if (settings.drift) {
+          this.vx += Math.sin(performance.now() / 5000) * 0.01;
+          this.vy += Math.cos(performance.now() / 5000) * 0.01;
+        }
+        this.x += this.vx;
+        this.y += this.vy;
+      }
+      // bounce or wrap
+      if (this.x < -50 || this.x > width + 50 || this.y < -50 || this.y > height + 50) {
+        this.reset();
+      }
+    }
+    draw() {
+      const micLevel = settings.micReactive ? settings.micLevel : 0;
+      // invert color on beat
+      const beat = micLevel > 0.3;
+      let col = beat ? invertColor(this.col) : this.col;
+      ctx.save();
+      ctx.globalAlpha = 0.8 + micLevel * 0.2;
+      if (settings.shape === 'circle') {
+        const rad = this.size * (1 + micLevel);
+        const grd = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, rad);
+        grd.addColorStop(0, col);
+        grd.addColorStop(1, 'transparent');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, rad, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (settings.shape === 'square') {
+        const s = this.size * (1 + micLevel);
+        ctx.fillStyle = col;
+        ctx.fillRect(this.x - s / 2, this.y - s / 2, s, s);
+      } else if (settings.shape === 'line') {
+        const len = this.size * 4 * (1 + micLevel);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.x - len / 2, this.y);
+        ctx.lineTo(this.x + len / 2, this.y);
+        ctx.stroke();
+      } else if (settings.shape === 'image' && this.img) {
+        const s = this.size * 3 * (1 + micLevel);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate((this.vx + this.vy) * 0.05);
+        ctx.drawImage(this.img, -s / 2, -s / 2, s, s);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Helper to get a point on path
+  function pointOnPath(points, t) {
+    // simple linear interpolation between points
+    const total = points.length;
+    const f = t * (total - 1);
+    const i = Math.floor(f);
+    const frac = f - i;
+    const p1 = points[i];
+    const p2 = points[(i + 1) % total];
+    return {
+      x: p1.x + (p2.x - p1.x) * frac,
+      y: p1.y + (p2.y - p1.y) * frac,
+    };
+  }
+
+  // Random color from gradient
+  function randomColor() {
+    const t = Math.random();
+    const [cA, cB, cC, cD] = settings.colors.map(hexToRgb);
+    function lerp(a,b,t){ return a + (b - a) * t; }
+    let col;
+    if (t < 0.33) {
+      col = cA.map((v, i) => lerp(v, cB[i], t / 0.33));
+    } else if (t < 0.66) {
+      col = cB.map((v, i) => lerp(v, cC[i], (t - 0.33) / 0.33));
+    } else {
+      col = cC.map((v, i) => lerp(v, cD[i], (t - 0.66) / 0.34));
+    }
+    return rgbToHex(col);
+  }
+
+  function invertColor(hex) {
+    const rgb = hexToRgb(hex);
+    const inv = rgb.map(v => 1 - v);
+    return rgbToHex(inv);
+  }
+  function hexToRgb(hex) {
+    const h = hex.replace('#','');
+    const r = parseInt(h.substring(0,2),16)/255;
+    const g = parseInt(h.substring(2,4),16)/255;
+    const b = parseInt(h.substring(4,6),16)/255;
+    return [r,g,b];
+  }
+  function rgbToHex(rgb) {
+    return '#' + rgb.map(v => {
+      const h = Math.round(v*255).toString(16).padStart(2,'0');
+      return h;
+    }).join('');
+  }
+
+  // Initialize particles
+  function initParticles() {
+    settings.particles = [];
+    for (let i = 0; i < settings.count; i++) {
+      settings.particles.push(new Particle());
+    }
+  }
+
+  function drawBackground() {
+    if (settings.background) {
+      ctx.drawImage(settings.background, 0, 0, width, height);
+    } else {
+      ctx.fillStyle = settings.colors[3] || '#000000';
+      ctx.fillRect(0, 0, width, height);
+    }
+  }
+
+  function drawBars() {
+    // bars: draws vertical bars across width using mic level and colors
+    const mic = settings.micLevel;
+    const n = Math.min(settings.count, 64);
+    const barWidth = width / n;
+    for (let i = 0; i < n; i++) {
+      const rnd = Math.random();
+      const hMult = 0.3 + rnd * 0.7;
+      const barHeight = (mic * height * 0.8 * hMult);
+      const x = i * barWidth;
+      const y = height - barHeight;
+      const col = randomColor();
+      ctx.fillStyle = col;
+      ctx.fillRect(x + barWidth * 0.1, y, barWidth * 0.8, barHeight);
+    }
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    // Update mic level
+    settings.micLevel = getMicLevel();
+    drawBackground();
+    if (settings.shape === 'bars') {
+      drawBars();
+    } else {
+      // update and draw particles
+      const now = performance.now();
+      const dt = 0.016;
+      settings.particles.forEach(p => {
+        p.update(dt);
+        p.draw();
+      });
+    }
+  }
+
+  // Event handlers
+  shapeSelect.addEventListener('change', (e) => {
+    settings.shape = e.target.value;
+    // show image upload row only for image shape
+    imageUploadRow.classList.toggle('hidden', settings.shape !== 'image');
+    // show path controls only for path behaviour
+    pathControls.classList.toggle('hidden', !(settings.shape === 'path' || settings.behavior === 'path'));
+    if (settings.shape === 'bars') {
+      behaviorSelect.value = 'random';
+      behaviorSelect.disabled = true;
+    } else {
+      behaviorSelect.disabled = false;
+    }
+    initParticles();
+  });
+  behaviorSelect.addEventListener('change', (e) => {
+    settings.behavior = e.target.value;
+    pathControls.classList.toggle('hidden', !(settings.behavior === 'path'));
+    initParticles();
+  });
+  [c1,c2,c3,c4].forEach((input, idx) => {
+    input.addEventListener('input', () => {
+      settings.colors[idx] = input.value;
+    });
+  });
+  countSlider.addEventListener('input', () => {
+    settings.count = parseInt(countSlider.value, 10);
+    initParticles();
+  });
+  sizeSlider.addEventListener('input', () => {
+    settings.size = parseFloat(sizeSlider.value);
+  });
+  speedSlider.addEventListener('input', () => {
+    settings.speed = parseFloat(speedSlider.value);
+  });
+  turbSlider.addEventListener('input', () => {
+    settings.turb = parseFloat(turbSlider.value);
+  });
+  micToggle.addEventListener('change', () => {
+    settings.micReactive = micToggle.checked;
+  });
+  windToggle.addEventListener('change', () => {
+    settings.pointerWind = windToggle.checked;
+  });
+  driftToggle.addEventListener('change', () => {
+    settings.drift = driftToggle.checked;
+  });
+  particleImagesInput.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    settings.images = [];
+    files.forEach(file => {
+      const img = new Image();
+      img.onload = () => settings.images.push(img);
+      img.src = URL.createObjectURL(file);
+    });
+    initParticles();
+  });
+  backgroundImageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const img = new Image();
+      img.onload = () => {
+        settings.background = img;
+      };
+      img.src = URL.createObjectURL(file);
+    }
+  });
+
+  // Pointer wind handler
+  let lastPointerX = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    lastPointerX = e.clientX;
+    if (settings.behavior === 'path' && settings.drawing) {
+      // start drawing path
+      settings.pathPoints.push({ x: e.clientX, y: e.clientY });
+    }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (settings.pointerWind && lastPointerX !== null) {
+      const dx = e.clientX - lastPointerX;
+      settings.windX = dx / width * 10; // amplified
+      lastPointerX = e.clientX;
+    }
+    if (settings.behavior === 'path' && settings.drawing) {
+      settings.pathPoints.push({ x: e.clientX, y: e.clientY });
+    }
+  });
+  canvas.addEventListener('pointerup', () => {
+    lastPointerX = null;
+    settings.windX = 0;
+    if (settings.behavior === 'path' && settings.drawing) {
+      settings.drawing = false;
+    }
+  });
+  // Start drawing path
+  startDrawingBtn.addEventListener('click', () => {
+    settings.drawing = true;
+    settings.pathPoints = [];
+  });
+  clearPathBtn.addEventListener('click', () => {
+    settings.pathPoints = [];
+  });
+
+  // Hide/show panel
+  hidePanelBtn.addEventListener('click', () => {
+    panel.classList.add('hidden');
+    showPanelBtn.classList.remove('hidden');
+  });
+  showPanelBtn.addEventListener('click', () => {
+    panel.classList.remove('hidden');
+    showPanelBtn.classList.add('hidden');
+  });
+
+  // Randomize
+  randomizeBtn.addEventListener('click', () => {
+    // random colors
+    [c1,c2,c3,c4].forEach((input, idx) => {
+      const randColor = '#' + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
+      input.value = randColor;
+      settings.colors[idx] = randColor;
+    });
+    // random shape
+    const shapes = ['circle','square','line','image','bars'];
+    settings.shape = shapes[Math.floor(Math.random()*shapes.length)];
+    shapeSelect.value = settings.shape;
+    // random behaviour (except path)
+    const behaviors = ['random','fromCenter','fromBottom','fromTop'];
+    settings.behavior = behaviors[Math.floor(Math.random()*behaviors.length)];
+    behaviorSelect.value = settings.behavior;
+    // random toggles
+    settings.pointerWind = Math.random() < 0.5;
+    windToggle.checked = settings.pointerWind;
+    settings.drift = Math.random() < 0.5;
+    driftToggle.checked = settings.drift;
+    // random counts and sizes
+    settings.count = Math.floor(Math.random()*400)+100;
+    countSlider.value = settings.count;
+    settings.size = Math.random()*20+5;
+    sizeSlider.value = settings.size;
+    // apply
+    initParticles();
+  });
+  // Share settings
+  shareBtn.addEventListener('click', () => {
+    const params = new URLSearchParams();
+    params.set('s', settings.shape);
+    params.set('b', settings.behavior);
+    settings.colors.forEach((c,i)=> params.set('c'+i, c.substring(1)));
+    params.set('n', settings.count);
+    params.set('sz', settings.size.toFixed(2));
+    params.set('sp', settings.speed.toFixed(2));
+    params.set('tu', settings.turb.toFixed(2));
+    params.set('mi', settings.micReactive ? '1':'0');
+    params.set('pw', settings.pointerWind ? '1':'0');
+    params.set('dr', settings.drift ? '1':'0');
+    const url = window.location.origin + window.location.pathname + '?' + params.toString();
+    navigator.clipboard.writeText(url).then(() => alert('Share link copied!'));
+  });
+
+  // Restore from URL hash
+  function loadFromParams() {
+    const p = new URLSearchParams(window.location.search);
+    if (p.has('s')) { settings.shape = p.get('s'); shapeSelect.value = settings.shape; }
+    if (p.has('b')) { settings.behavior = p.get('b'); behaviorSelect.value = settings.behavior; }
+    for (let i=0; i<4; i++) {
+      if (p.has('c'+i)) {
+        const col = '#' + p.get('c'+i);
+        settings.colors[i] = col;
+        [c1,c2,c3,c4][i].value = col;
+      }
+    }
+    if (p.has('n')) { settings.count = parseInt(p.get('n'),10); countSlider.value = settings.count; }
+    if (p.has('sz')) { settings.size = parseFloat(p.get('sz')); sizeSlider.value = settings.size; }
+    if (p.has('sp')) { settings.speed = parseFloat(p.get('sp')); speedSlider.value = settings.speed; }
+    if (p.has('tu')) { settings.turb = parseFloat(p.get('tu')); turbSlider.value = settings.turb; }
+    if (p.has('mi')) { settings.micReactive = p.get('mi') === '1'; micToggle.checked = settings.micReactive; }
+    if (p.has('pw')) { settings.pointerWind = p.get('pw') === '1'; windToggle.checked = settings.pointerWind; }
+    if (p.has('dr')) { settings.drift = p.get('dr') === '1'; driftToggle.checked = settings.drift; }
+  }
+
+  // Initialization
+  loadFromParams();
+  initMic();
+  initParticles();
+  animate();
+  </script>
+</body>
+</html>
